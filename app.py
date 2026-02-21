@@ -2,14 +2,20 @@ import os
 import requests
 import gspread
 import datetime
+import json
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread.utils import rowcol_to_a1
-import json
 
-# ===== CONFIG FROM ENV =====
+# =========================
+# ENV CONFIG
+# =========================
+
 API_KEY = os.environ.get("CMC_API_KEY")
-SHEET_URL = os.environ.get("SHEET_URL")
 SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_CREDENTIALS")
+
+# Google Sheet ID (ổn định nhất)
+SPREADSHEET_ID = "1rPXYy-_zjwgJKBPUFMXoVGb0y8dI5G7yt8QZZtTX0uU"
+
 COIN_HEADER_ROW = 6
 MARKETCAP_ROW = 7
 TIMESTAMP_CELL = "A1"
@@ -20,7 +26,10 @@ if not API_KEY:
 if not SERVICE_ACCOUNT_JSON:
     raise ValueError("Missing GOOGLE_CREDENTIALS")
 
-# ===== LOAD GOOGLE CREDS FROM ENV =====
+# =========================
+# AUTH GOOGLE
+# =========================
+
 creds_dict = json.loads(SERVICE_ACCOUNT_JSON)
 
 scope = [
@@ -29,15 +38,22 @@ scope = [
 ]
 
 creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    creds_dict, scope
+    creds_dict,
+    scope
 )
 
 client = gspread.authorize(creds)
-sheet = client.open_by_url(SHEET_URL).sheet1
 
+# 🔥 DÙNG open_by_key (ổn định hơn open_by_url)
+sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+
+
+# =========================
+# UPDATE FUNCTION
+# =========================
 
 def update_marketcap():
-    print("Updating...")
+    print("Updating market cap...")
 
     header = sheet.row_values(COIN_HEADER_ROW)
     coins = [c.strip() for c in header if c.strip() != ""]
@@ -58,11 +74,11 @@ def update_marketcap():
         "convert": "USD"
     }
 
-    response = requests.get(url, headers=headers, params=params, timeout=15)
+    response = requests.get(url, headers=headers, params=params, timeout=20)
     data = response.json()
 
     if "data" not in data:
-        print("API error:", data)
+        print("CMC API error:", data)
         return
 
     marketcap_values = []
@@ -73,26 +89,36 @@ def update_marketcap():
             continue
 
         try:
-            market_cap = float(data["data"][coin]["quote"]["USD"]["market_cap"])
+            market_cap = float(
+                data["data"][coin]["quote"]["USD"]["market_cap"]
+            )
             marketcap_values.append(market_cap)
         except Exception:
             marketcap_values.append("ERROR")
 
+    # Batch update (1 lần duy nhất)
     start_cell = rowcol_to_a1(MARKETCAP_ROW, 1)
     end_cell = rowcol_to_a1(MARKETCAP_ROW, len(marketcap_values))
     range_string = f"{start_cell}:{end_cell}"
 
-    sheet.update([marketcap_values], range_name=range_string)
+    sheet.update(
+        values=[marketcap_values],
+        range_name=range_string
+    )
 
     now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
     sheet.update(
-        [[f"Last update: {now}"]],
+        values=[[f"Last update: {now}"]],
         range_name=TIMESTAMP_CELL
     )
 
     print("Updated at", now)
 
+
+# =========================
+# MAIN
+# =========================
 
 if __name__ == "__main__":
     update_marketcap()
