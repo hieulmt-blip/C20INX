@@ -106,7 +106,10 @@ def update_marketcap():
         range_name=range_string
     )
 
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    from datetime import timezone, timedelta
+
+VN_TZ = timezone(timedelta(hours=7))
+now = datetime.datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S GMT+7")
 
     sheet.update(
         values=[[f"Last update: {now}"]],
