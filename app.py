@@ -3,8 +3,10 @@ import requests
 import gspread
 import datetime
 import json
+import time
 from oauth2client.service_account import ServiceAccountCredentials
 from gspread.utils import rowcol_to_a1
+from datetime import timezone, timedelta
 
 # =========================
 # ENV CONFIG
@@ -13,7 +15,6 @@ from gspread.utils import rowcol_to_a1
 API_KEY = os.environ.get("CMC_API_KEY")
 SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_CREDENTIALS")
 
-# Google Sheet ID (ổn định nhất)
 SPREADSHEET_ID = "1rPXYy-_zjwgJKBPUFMXoVGb0y8dI5G7yt8QZZtTX0uU"
 
 COIN_HEADER_ROW = 6
@@ -27,7 +28,7 @@ if not SERVICE_ACCOUNT_JSON:
     raise ValueError("Missing GOOGLE_CREDENTIALS")
 
 # =========================
-# AUTH GOOGLE
+# GOOGLE AUTH
 # =========================
 
 creds_dict = json.loads(SERVICE_ACCOUNT_JSON)
@@ -43,9 +44,9 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(
 )
 
 client = gspread.authorize(creds)
-
-# 🔥 DÙNG open_by_key (ổn định hơn open_by_url)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+
+VN_TZ = timezone(timedelta(hours=7))
 
 
 # =========================
@@ -53,7 +54,7 @@ sheet = client.open_by_key(SPREADSHEET_ID).sheet1
 # =========================
 
 def update_marketcap():
-    print("Updating market cap...")
+    print("Updating...")
 
     header = sheet.row_values(COIN_HEADER_ROW)
     coins = [c.strip() for c in header if c.strip() != ""]
@@ -78,7 +79,7 @@ def update_marketcap():
     data = response.json()
 
     if "data" not in data:
-        print("CMC API error:", data)
+        print("CMC error:", data)
         return
 
     marketcap_values = []
@@ -93,25 +94,18 @@ def update_marketcap():
                 data["data"][coin]["quote"]["USD"]["market_cap"]
             )
             marketcap_values.append(market_cap)
-        except Exception:
+        except:
             marketcap_values.append("ERROR")
 
-    # Batch update (1 lần duy nhất)
     start_cell = rowcol_to_a1(MARKETCAP_ROW, 1)
     end_cell = rowcol_to_a1(MARKETCAP_ROW, len(marketcap_values))
     range_string = f"{start_cell}:{end_cell}"
 
+    sheet.update(values=[marketcap_values], range_name=range_string)
+
+    now = datetime.datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S GMT+7")
+
     sheet.update(
-        values=[marketcap_values],
-        range_name=range_string
-    )
-
-    from datetime import timezone, timedelta
-
-VN_TZ = timezone(timedelta(hours=7))
-now = datetime.datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S GMT+7")
-
-sheet.update(
         values=[[f"Last update: {now}"]],
         range_name=TIMESTAMP_CELL
     )
@@ -120,8 +114,27 @@ sheet.update(
 
 
 # =========================
-# MAIN
+# EXACT 5-MIN LOOP
+# =========================
+
+def sleep_until_next_5_min():
+    now = datetime.datetime.now(timezone.utc)
+    seconds = (5 - now.minute % 5) * 60 - now.second
+    if seconds <= 0:
+        seconds += 300
+    print(f"Sleeping {seconds}s...")
+    time.sleep(seconds)
+
+
+# =========================
+# MAIN LOOP
 # =========================
 
 if __name__ == "__main__":
-    update_marketcap()
+    print("Worker started...")
+    while True:
+        sleep_until_next_5_min()
+        try:
+            update_marketcap()
+        except Exception as e:
+            print("Error:", e)
