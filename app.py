@@ -7,10 +7,9 @@ from gspread.utils import rowcol_to_a1
 import json
 
 # ===== CONFIG FROM ENV =====
-API_KEY = os.environ.get("c0594006aaa9442e881f9cd9bc7e8a3b")
-SHEET_URL = os.environ.get("https://docs.google.com/spreadsheets/d/1rPXYy-_zjwgJKBPUFMXoVGb0y8dI5G7yt8QZZtTX0uU/edit")
+API_KEY = os.environ.get("CMC_API_KEY")
+SHEET_URL = os.environ.get("SHEET_URL")
 SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_CREDENTIALS")
-
 COIN_HEADER_ROW = 6
 MARKETCAP_ROW = 7
 TIMESTAMP_CELL = "A1"
