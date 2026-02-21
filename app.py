@@ -111,7 +111,7 @@ def update_marketcap():
 VN_TZ = timezone(timedelta(hours=7))
 now = datetime.datetime.now(VN_TZ).strftime("%Y-%m-%d %H:%M:%S GMT+7")
 
-    sheet.update(
+sheet.update(
         values=[[f"Last update: {now}"]],
         range_name=TIMESTAMP_CELL
     )
